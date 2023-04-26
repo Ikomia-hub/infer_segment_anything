@@ -111,6 +111,10 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             self.set_param_object(copy.deepcopy(param))
 
         self.mask_generator = None
+        self.input_point = None
+        self.input_label = None
+        self.input_box = []
+        self.multi_mask_out = True
         self.device = torch.device("cpu")
         self.base_url= "https://dl.fbaipublicfiles.com/segment_anything/"
 
@@ -172,28 +176,73 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         return mask_output
 
-    def infer_predictor(self, graph_input,src_image, sam_model):
+    def infer_predictor(self, graph_input,src_image, resizing, sam_model):
         # Get parameters :
         param = self.get_param_object()
 
-        type_graph = graph_input.get_items() #Get list of input graphics items.
-        # Get graphic coordinates
-        bboxes = type_graph[0].get_bounding_rect() # Get graphics item bounding rectangle.
-        input_point = np.array([[bboxes[0], bboxes[1]]])
-        input_label = np.array([1])
+        graphics = graph_input.get_items() #Get list of input graphics items.
+
+        self.box = []
+        for i, graphic in enumerate(graphics):
+            bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
+            if graphic.get_type() == 3: # rectangle
+                x1 = bboxes[0]*resizing
+                y1 = bboxes[1]*resizing
+                x2 = (bboxes[2]+bboxes[0])*resizing
+                y2 = (bboxes[3]+bboxes[1])*resizing
+                self.box.append([x1, y1, x2, y2])
+                self.input_box = np.array(self.box)
+                self.multi_mask_out = False
+                
+            if graphic.get_type() == 1: # point
+                point = [bboxes[0]*resizing, bboxes[1]*resizing]
+                self.input_point = np.array([point])
+                self.input_label = np.array([1])
+                self.multi_mask_out = True
+                self.input_box = None
 
         predictor = SamPredictor(sam_model)
         # Calculate the necesssary image embedding
         predictor.set_image(src_image)
 
-        # Inference
-        masks, scores, logits = predictor.predict(
-            point_coords=input_point,
-            point_labels=input_label,
-            multimask_output=True,
-        )
+        # Inference 
+        if self.input_box is not None and len(self.input_box) > 0: # Inference from multiple boxes
+            self.multi_mask_out = False
+            input_boxes = torch.tensor(self.input_box, device=self.device)
+            transformed_boxes = predictor.transform.apply_boxes_torch(
+                                                input_boxes, 
+                                                src_image.shape[:2]
+                                                )
+            masks, _, _ = predictor.predict_torch(
+                point_coords=None,
+                point_labels=None,
+                boxes=transformed_boxes,
+                multimask_output=self.multi_mask_out,
+                )
 
-        mask_output = masks[param.mask_id-1]
+            mask_output = np.zeros((
+                            src_image.shape[0],
+                            src_image.shape[1]
+                            ))
+
+            for i, mask_bool in enumerate(masks):
+                mask = mask_bool.cpu().numpy()[0]
+                i += 1
+                mask_output = mask_output + mask * i
+        
+        else: # Inference from a single point or box
+            masks, _, _ = predictor.predict(
+                point_coords=self.input_point,
+                point_labels=self.input_label,
+                box=self.input_box,
+                multimask_output=self.multi_mask_out,
+            )
+
+        # Select the mask to be displayed
+        if self.multi_mask_out is True:
+            mask_output = masks[param.mask_id-1]
+        else:
+            mask_output = mask_output
 
         return mask_output
 
@@ -212,10 +261,11 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         src_image = task_input.get_image()
 
         # Resize image
+        ratio = param.input_size_percent / 100
         h_orig, w_orig = src_image.shape[0], src_image.shape[1]
         if param.input_size_percent < 100:
-            width = int(src_image.shape[1] * param.input_size_percent / 100)
-            height = int(src_image.shape[0] * param.input_size_percent / 100)
+            width = int(src_image.shape[1] * ratio)
+            height = int(src_image.shape[0] * ratio)
             dim = (width, height)
             src_image = cv2.resize(src_image, dim, interpolation = cv2.INTER_LINEAR)
 
@@ -228,10 +278,11 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         graph_input = self.get_input(1)
         if graph_input.is_data_available():
-            mask = self.infer_predictor(graph_input, src_image, sam)
+            mask = self.infer_predictor(graph_input, src_image, ratio, sam)
         else:
             mask = self.infer_mask_generator(src_image, sam)
 
+        mask = mask.astype("uint8")
         if param.input_size_percent < 100:
             mask = cv2.resize(
                             mask,
@@ -240,8 +291,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                                 )
 
         self.get_output(0)
-        self.set_mask(mask.astype("uint8"))
-
+        self.set_mask(mask)
 
         # Step progress bar (Ikomia Studio):
         self.emit_step_progress()
