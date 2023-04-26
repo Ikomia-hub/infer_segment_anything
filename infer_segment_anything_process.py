@@ -26,6 +26,8 @@ from pathlib import Path
 import os
 import requests
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+from ikomia.dataprocess import CGraphicsInput
+from ikomia.core import CGraphicsRectangle
 
 
 # --------------------
@@ -49,6 +51,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.crop_n_points_downscale_factor = 1
         self.min_mask_region_area = 0
         self.input_size_percent = 100
+        self.mask_id = 1
         self.cuda = torch.cuda.is_available()
         self.update = False
 
@@ -67,6 +70,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.crop_n_points_downscale_factor = int(param_map["crop_n_points_downscale_factor"])
         self.min_mask_region_area = int(param_map["min_mask_region_area"])
         self.input_size_percent = int(param_map["input_size_percent"])
+        self.mask_id = int(param_map["mask_id"])
         self.cuda = utils.strtobool(param_map["cuda"])
         self.update = True
 
@@ -86,6 +90,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         param_map["crop_n_points_downscale_factor"] = str(self.crop_n_points_downscale_factor)
         param_map["min_mask_region_area"] = str(self.min_mask_region_area)
         param_map["input_size_percent"] = str(self.input_size_percent)
+        param_map["mask_id"] = str(self.mask_id)
         param_map["cuda"] = str(self.cuda)
         return param_map
 
@@ -98,6 +103,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
     def __init__(self, name, param):
         dataprocess.CSemanticSegmentationTask.__init__(self, name)
+        #self.add_output(dataprocess.CGraphicsOutput())
         # Create parameters class
         if param is None:
             self.set_param_object(InferSegmentAnythingParam())
@@ -130,6 +136,66 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             with open(os.path.join(to_folder, model_list[model_name]) , 'wb') as f:
                 f.write(response.content)
         return model_weight
+    
+    def infer_mask_generator(self, image, sam_model):
+        # Get parameters :
+        param = self.get_param_object()
+
+        mask_generator = SamAutomaticMaskGenerator(
+                                model=sam_model,
+                                points_per_side= param.points_per_side, # number of points to be sampled along one side of the image
+                                points_per_batch=param.points_per_batch, # number of points to be sampled in one batch
+                                pred_iou_thresh=param.iou_thres, # predicted mask quality
+                                stability_score_thresh= param.stability_score_thresh, #  cutoff used to binarize the mask predictions
+                                box_nms_thresh=param.box_nms_thresh, # box IoU cutoff (filter duplicate masks)
+                                crop_n_layers = param.crop_n_layers, #  mask prediction will be run again on crops of the image
+                                crop_overlap_ratio=param.crop_overlap_ratio,
+                                crop_nms_thresh=param.crop_nms_thresh,
+                                crop_n_points_downscale_factor= param.crop_n_points_downscale_factor,
+                                min_mask_region_area=param.min_mask_region_area # post-process remove disconected regions
+                                    )
+
+        # Generate mask
+        results = mask_generator.generate(image)
+
+        if len(results) > 0:
+            mask_output = np.zeros((
+                        results[0]["segmentation"].shape[0],
+                        results[0]["segmentation"].shape[1]
+                        ))
+            for i, mask_bool in enumerate(results):
+                i += 1
+                mask_output = mask_output + mask_bool["segmentation"] * i
+
+        else:
+            print("No mask predicted, increasing the number of points per side may help")
+
+        return mask_output
+
+    def infer_predictor(self, graph_input,src_image, sam_model):
+        # Get parameters :
+        param = self.get_param_object()
+
+        type_graph = graph_input.get_items() #Get list of input graphics items.
+        # Get graphic coordinates
+        bboxes = type_graph[0].get_bounding_rect() # Get graphics item bounding rectangle.
+        input_point = np.array([[bboxes[0], bboxes[1]]])
+        input_label = np.array([1])
+
+        predictor = SamPredictor(sam_model)
+        # Calculate the necesssary image embedding
+        predictor.set_image(src_image)
+
+        # Inference
+        masks, scores, logits = predictor.predict(
+            point_coords=input_point,
+            point_labels=input_label,
+            multimask_output=True,
+        )
+
+        mask_output = masks[param.mask_id-1]
+
+        return mask_output
 
     def run(self):
         # Core function of your process
@@ -146,8 +212,8 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         src_image = task_input.get_image()
 
         # Resize image
+        h_orig, w_orig = src_image.shape[0], src_image.shape[1]
         if param.input_size_percent < 100:
-            h_orig, w_orig = src_image.shape[0], src_image.shape[1]
             width = int(src_image.shape[1] * param.input_size_percent / 100)
             height = int(src_image.shape[0] * param.input_size_percent / 100)
             dim = (width, height)
@@ -160,47 +226,22 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             sam = sam_model_registry[param.model_name](checkpoint=model_path)
             sam.to(device=self.device)
 
-            mask_generator = SamAutomaticMaskGenerator(
-                                    model=sam,
-                                    points_per_side= param.points_per_side, # number of points to be sampled along one side of the image
-                                    points_per_batch=param.points_per_batch, # number of points to be sampled in one batch
-                                    pred_iou_thresh=param.iou_thres, # predicted mask quality
-                                    stability_score_thresh= param.stability_score_thresh, #  cutoff used to binarize the mask predictions
-                                    box_nms_thresh=param.box_nms_thresh, # box IoU cutoff (filter duplicate masks)
-                                    crop_n_layers = param.crop_n_layers, #  mask prediction will be run again on crops of the image
-                                    crop_overlap_ratio=param.crop_overlap_ratio,
-                                    crop_nms_thresh=param.crop_nms_thresh,
-                                    crop_n_points_downscale_factor= param.crop_n_points_downscale_factor,
-                                    min_mask_region_area=param.min_mask_region_area # post-process remove disconected regions
-                                        )
-
-        # Generate mask
-        results = mask_generator.generate(src_image)
-
-        if len(results) > 0:
-            mask = np.zeros((
-                        results[0]["segmentation"].shape[0],
-                        results[0]["segmentation"].shape[1]
-                        ))
-            for i, mask_bool in enumerate(results):
-                i += 1
-                mask = mask + mask_bool["segmentation"] * i
-
-            if param.input_size_percent < 100:
-                src_image = cv2.resize(
-                                src_image,
-                                (h_orig, w_orig),
-                                interpolation = cv2.INTER_LINEAR
-                                    )
-                mask = cv2.resize(
-                                mask,
-                                (w_orig, h_orig),
-                                interpolation = cv2.INTER_NEAREST
-                                    )
-
-            self.set_mask(mask.astype("uint8"))
+        graph_input = self.get_input(1)
+        if graph_input.is_data_available():
+            mask = self.infer_predictor(graph_input, src_image, sam)
         else:
-            print("No mask predicted, increasing the number of points per side may help")
+            mask = self.infer_mask_generator(src_image, sam)
+
+        if param.input_size_percent < 100:
+            mask = cv2.resize(
+                            mask,
+                            (w_orig, h_orig),
+                            interpolation = cv2.INTER_NEAREST
+                                )
+
+        self.get_output(0)
+        self.set_mask(mask.astype("uint8"))
+
 
         # Step progress bar (Ikomia Studio):
         self.emit_step_progress()

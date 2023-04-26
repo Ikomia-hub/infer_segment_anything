@@ -61,25 +61,12 @@ class InferSegmentAnythingWidget(core.CWorkflowTaskWidget):
         self.spin_input_size_percent = pyqtutils.append_spin(self.grid_layout,
                                                           "Image size (%)",
                                                           self.parameters.input_size_percent,
-                                                          min=1, max=100)       
-
-        
-        # self.spin_iou_thres = pyqtutils.append_double_spin(self.grid_layout,
-        #                                                    "IoU threshold",
-        #                                                   self.parameters.iou_thres,
-        #                                                   min=0., max=1.,
-        #                                                   step=0.01, decimals=2)
-        
-        # self.spin_crop_n_layers = pyqtutils.append_spin(self.grid_layout,
-        #                                                 "Crop n layer",
-        #                                                 self.parameters.crop_n_layers)
-        
-        # self.spin_crop_n_points_downscale_factor = pyqtutils.append_spin(self.grid_layout,
-        #                                                                  "Crop n points downscale factor",
-        #                                                                  self.parameters.crop_n_points_downscale_factor)
-        # self.spin_min_mask_region_area = pyqtutils.append_spin(self.grid_layout,
-        #                                                        "Min max region area",
-        #                                                        self.parameters.min_mask_region_area)
+                                                          min=1, max=100)
+ 
+        self.spin_mask_output = pyqtutils.append_spin(self.grid_layout,
+                                                          "Mask ID (If graphic input set)",
+                                                          self.parameters.mask_id,
+                                                          min=1, max=3)
 
         # Set widget layout
         self.set_layout(layout_ptr)
@@ -91,12 +78,7 @@ class InferSegmentAnythingWidget(core.CWorkflowTaskWidget):
         self.parameters.cuda = self.check_cuda.isChecked()
         self.parameters.points_per_side = self.spin_points_per_side.value()
         self.parameters.input_size_percent = self.spin_input_size_percent.value()
-        # self.parameters.spin_iou_thres = self.spin_iou_thres.value()
-        # self.parameters.spin_crop_n_layers = self.spin_crop_n_layers.value()
-        # self.parameters.crop_n_points_downscale_factor = self.spin_crop_n_points_downscale_factor.value()
-        # self.parameters.min_mask_region_area = self.spin_min_mask_region_area.value()
-
-
+        self.parameters.mask_id = self.spin_mask_output.value()
 
         # Send signal to launch the process
         self.emit_apply(self.parameters)
