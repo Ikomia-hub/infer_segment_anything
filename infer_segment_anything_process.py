@@ -112,8 +112,8 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         self.mask_generator = None
         self.input_point = None
-        self.input_label = None
-        self.input_box = []
+        self.input_label = np.array([1]) # forground point
+        self.input_box = None
         self.multi_mask_out = True
         self.device = torch.device("cpu")
         self.base_url= "https://dl.fbaipublicfiles.com/segment_anything/"
@@ -192,32 +192,30 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 y2 = (bboxes[3]+bboxes[1])*resizing
                 self.box.append([x1, y1, x2, y2])
                 self.input_box = np.array(self.box)
+                self.input_label = np.array([0]) # background point
                 self.multi_mask_out = False
-                
+
             if graphic.get_type() == 1: # point
                 point = [bboxes[0]*resizing, bboxes[1]*resizing]
                 self.input_point = np.array([point])
-                self.input_label = np.array([1])
-                self.multi_mask_out = True
-                self.input_box = None
 
         predictor = SamPredictor(sam_model)
         # Calculate the necesssary image embedding
         predictor.set_image(src_image)
 
-        # Inference 
-        if self.input_box is not None and len(self.input_box) > 0: # Inference from multiple boxes
+        # Inference from multiple boxes
+        if self.input_box is not None and len(self.input_box) > 1:
             self.multi_mask_out = False
             input_boxes = torch.tensor(self.input_box, device=self.device)
             transformed_boxes = predictor.transform.apply_boxes_torch(
-                                                input_boxes, 
+                                                input_boxes,
                                                 src_image.shape[:2]
                                                 )
             masks, _, _ = predictor.predict_torch(
                 point_coords=None,
                 point_labels=None,
                 boxes=transformed_boxes,
-                multimask_output=self.multi_mask_out,
+                multimask_output=False,
                 )
 
             mask_output = np.zeros((
@@ -229,21 +227,37 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 mask = mask_bool.cpu().numpy()[0]
                 i += 1
                 mask_output = mask_output + mask * i
-        
-        else: # Inference from a single point or box
+
+        # Inference from a single point
+        elif self.input_point is not None and self.input_box is None:
             masks, _, _ = predictor.predict(
                 point_coords=self.input_point,
                 point_labels=self.input_label,
-                box=self.input_box,
-                multimask_output=self.multi_mask_out,
+                multimask_output=True,
             )
-
-        # Select the mask to be displayed
-        if self.multi_mask_out is True:
             mask_output = masks[param.mask_id-1]
-        else:
-            mask_output = mask_output
 
+        # Inference from a single box
+        elif self.input_point is None and len(self.input_box) == 1:
+            masks, _, _ = predictor.predict(
+            point_coords=None,
+            point_labels=None,
+            box=self.input_box[None, :],
+            multimask_output=False,
+        )
+            mask_output = masks[0]
+
+        # Inference from a single box and a single point
+        else self.input_point is not None and len(self.input_box) == 1:
+            print("Inference from a single box and a single point")
+            masks, _, _ = predictor.predict(
+                point_coords=self.input_point,
+                point_labels=np.array([0]),
+                box=self.input_box,
+                multimask_output=False,
+            )
+            mask_output = masks[0]
+ 
         return mask_output
 
     def run(self):
