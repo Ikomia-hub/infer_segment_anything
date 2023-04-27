@@ -26,8 +26,8 @@ from pathlib import Path
 import os
 import requests
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
-from ikomia.dataprocess import CGraphicsInput
-from ikomia.core import CGraphicsRectangle
+from infer_segment_anything.draw_graphics import DrawingGraphics
+from PyQt5.QtWidgets import QApplication
 
 
 # --------------------
@@ -54,6 +54,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.mask_id = 1
         self.cuda = torch.cuda.is_available()
         self.update = False
+        self.image_path = ""
 
     def set_values(self, param_map):
         # Set parameters values from Ikomia application
@@ -72,6 +73,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.input_size_percent = int(param_map["input_size_percent"])
         self.mask_id = int(param_map["mask_id"])
         self.cuda = utils.strtobool(param_map["cuda"])
+        self.image_path = param_map["image_path"]
         self.update = True
 
     def get_values(self):
@@ -91,6 +93,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         param_map["min_mask_region_area"] = str(self.min_mask_region_area)
         param_map["input_size_percent"] = str(self.input_size_percent)
         param_map["mask_id"] = str(self.mask_id)
+        param_map["image_path"] = self.image_path
         param_map["cuda"] = str(self.cuda)
         return param_map
 
@@ -181,23 +184,42 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         param = self.get_param_object()
 
         graphics = graph_input.get_items() #Get list of input graphics items.
+        # Get input from graphics (API)
+        if param.image_path != "":
+            if os.path.isfile(param.image_path):
+                app = QApplication([])
+                drawing_app = DrawingGraphics(param.image_path)
+                drawing_app.show()
+                app.exec_()
+                app.quit()
+                if len(drawing_app.boxes) > 0:
+                    self.input_box = np.array(drawing_app.boxes)
+                    self.input_label = np.array([0]) # background point
+                    self.multi_mask_out = False
 
-        self.box = []
-        for i, graphic in enumerate(graphics):
-            bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
-            if graphic.get_type() == 3: # rectangle
-                x1 = bboxes[0]*resizing
-                y1 = bboxes[1]*resizing
-                x2 = (bboxes[2]+bboxes[0])*resizing
-                y2 = (bboxes[3]+bboxes[1])*resizing
-                self.box.append([x1, y1, x2, y2])
-                self.input_box = np.array(self.box)
-                self.input_label = np.array([0]) # background point
-                self.multi_mask_out = False
+                if len(drawing_app.point) > 0:
+                    self.input_point = np.array([drawing_app.point])
+            else:
+                print("Invalid image path")
+        
+        # Get input from graphics (STUDIO)
+        else:
+            self.box = []
+            for i, graphic in enumerate(graphics):
+                bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
+                if graphic.get_type() == 3: # rectangle
+                    x1 = bboxes[0]*resizing
+                    y1 = bboxes[1]*resizing
+                    x2 = (bboxes[2]+bboxes[0])*resizing
+                    y2 = (bboxes[3]+bboxes[1])*resizing
+                    self.box.append([x1, y1, x2, y2])
+                    self.input_box = np.array(self.box)
+                    self.input_label = np.array([0]) # background point
+                    self.multi_mask_out = False
 
-            if graphic.get_type() == 1: # point
-                point = [bboxes[0]*resizing, bboxes[1]*resizing]
-                self.input_point = np.array([point])
+                if graphic.get_type() == 1: # point
+                    point = [bboxes[0]*resizing, bboxes[1]*resizing]
+                    self.input_point = np.array([point])
 
         predictor = SamPredictor(sam_model)
         # Calculate the necesssary image embedding
@@ -248,8 +270,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             mask_output = masks[0]
 
         # Inference from a single box and a single point
-        else self.input_point is not None and len(self.input_box) == 1:
-            print("Inference from a single box and a single point")
+        elif self.input_point is not None and len(self.input_box) == 1:
             masks, _, _ = predictor.predict(
                 point_coords=self.input_point,
                 point_labels=np.array([0]),
@@ -257,7 +278,9 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 multimask_output=False,
             )
             mask_output = masks[0]
- 
+        else:
+            print("Please select a point and/or a box")
+
         return mask_output
 
     def run(self):
@@ -291,7 +314,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             sam.to(device=self.device)
 
         graph_input = self.get_input(1)
-        if graph_input.is_data_available():
+        if graph_input.is_data_available() or param.image_path != "":
             mask = self.infer_predictor(graph_input, src_image, ratio, sam)
         else:
             mask = self.infer_mask_generator(src_image, sam)
