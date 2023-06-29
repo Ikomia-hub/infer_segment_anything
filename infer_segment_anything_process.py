@@ -204,25 +204,25 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         
         # Get input from graphics (STUDIO)
         else:
-            self.box = []
+            box = []
             for i, graphic in enumerate(graphics):
                 bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
-                if graphic.get_type() == 3: # rectangle
+                if graphic.get_type() == core.GraphicsItem.RECTANGLE: # rectangle
                     x1 = bboxes[0]*resizing
                     y1 = bboxes[1]*resizing
                     x2 = (bboxes[2]+bboxes[0])*resizing
                     y2 = (bboxes[3]+bboxes[1])*resizing
-                    self.box.append([x1, y1, x2, y2])
-                    self.input_box = np.array(self.box)
+                    box.append([x1, y1, x2, y2])
+                    self.input_box = np.array(box)
                     self.input_label = np.array([0]) # background point
                     self.multi_mask_out = False
 
-                if graphic.get_type() == 1: # point
+                if graphic.get_type() == core.GraphicsItem.POINT: # point
                     point = [bboxes[0]*resizing, bboxes[1]*resizing]
                     self.input_point = np.array([point])
 
         predictor = SamPredictor(sam_model)
-        # Calculate the necesssary image embedding
+        # Calculate the necessary image embedding
         predictor.set_image(src_image)
 
         # Inference from multiple boxes
