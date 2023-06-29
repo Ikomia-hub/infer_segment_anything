@@ -113,7 +113,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         else:
             self.set_param_object(copy.deepcopy(param))
 
-        self.mask_generator = None
+        self.sam = None
         self.input_point = None
         self.input_label = np.array([1]) # forground point
         self.input_box = None
@@ -307,17 +307,18 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             src_image = cv2.resize(src_image, dim, interpolation = cv2.INTER_LINEAR)
 
         # Load model
-        if param.update or self.mask_generator is None:
+        if param.update or self.sam is None:
             self.device = torch.device("cuda") if param.cuda else torch.device("cpu")
             model_path = self.get_model(param.model_name)
-            sam = sam_model_registry[param.model_name](checkpoint=model_path)
-            sam.to(device=self.device)
+            self.sam = sam_model_registry[param.model_name](checkpoint=model_path)
+            self.sam.to(device=self.device)
+            param.update = False
 
         graph_input = self.get_input(1)
         if graph_input.is_data_available() or param.image_path != "":
-            mask = self.infer_predictor(graph_input, src_image, ratio, sam)
+            mask = self.infer_predictor(graph_input, src_image, ratio, self.sam)
         else:
-            mask = self.infer_mask_generator(src_image, sam)
+            mask = self.infer_mask_generator(src_image, self.sam)
 
         mask = mask.astype("uint8")
         if param.input_size_percent < 100:
