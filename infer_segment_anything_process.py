@@ -114,6 +114,8 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             self.set_param_object(copy.deepcopy(param))
 
         self.sam = None
+        self.predictor = None
+        self.mask_generator = None
         self.input_point = None
         self.input_label = np.array([1]) # forground point
         self.input_box = None
@@ -125,7 +127,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         # Function returning the number of progress steps for this process
         # This is handled by the main progress bar of Ikomia application
         return 1
-    
+
     def get_model(self, model_name):
         model_list = {"vit_b": "sam_vit_b_01ec64.pth",
                       "vit_l": "sam_vit_l_0b3195.pth",
@@ -143,27 +145,10 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             with open(os.path.join(to_folder, model_list[model_name]) , 'wb') as f:
                 f.write(response.content)
         return model_weight
-    
-    def infer_mask_generator(self, image, sam_model):
-        # Get parameters :
-        param = self.get_param_object()
 
-        mask_generator = SamAutomaticMaskGenerator(
-                                model=sam_model,
-                                points_per_side= param.points_per_side, # number of points to be sampled along one side of the image
-                                points_per_batch=param.points_per_batch, # number of points to be sampled in one batch
-                                pred_iou_thresh=param.iou_thres, # predicted mask quality
-                                stability_score_thresh= param.stability_score_thresh, #  cutoff used to binarize the mask predictions
-                                box_nms_thresh=param.box_nms_thresh, # box IoU cutoff (filter duplicate masks)
-                                crop_n_layers = param.crop_n_layers, #  mask prediction will be run again on crops of the image
-                                crop_overlap_ratio=param.crop_overlap_ratio,
-                                crop_nms_thresh=param.crop_nms_thresh,
-                                crop_n_points_downscale_factor= param.crop_n_points_downscale_factor,
-                                min_mask_region_area=param.min_mask_region_area # post-process remove disconected regions
-                                    )
-
+    def infer_mask_generator(self, image, mask_gen):
         # Generate mask
-        results = mask_generator.generate(image)
+        results = mask_gen.generate(image)
 
         if len(results) > 0:
             mask_output = np.zeros((
@@ -179,7 +164,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         return mask_output
 
-    def infer_predictor(self, graph_input,src_image, resizing, sam_model):
+    def infer_predictor(self, graph_input,src_image, resizing, pred):
         # Get parameters :
         param = self.get_param_object()
 
@@ -201,7 +186,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                     self.input_point = np.array([drawing_app.point])
             else:
                 print("Invalid image path")
-        
+
         # Get input from graphics (STUDIO)
         else:
             box = []
@@ -221,19 +206,18 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                     point = [bboxes[0]*resizing, bboxes[1]*resizing]
                     self.input_point = np.array([point])
 
-        predictor = SamPredictor(sam_model)
         # Calculate the necessary image embedding
-        predictor.set_image(src_image)
+        pred.set_image(src_image)
 
         # Inference from multiple boxes
         if self.input_box is not None and len(self.input_box) > 1:
             self.multi_mask_out = False
             input_boxes = torch.tensor(self.input_box, device=self.device)
-            transformed_boxes = predictor.transform.apply_boxes_torch(
+            transformed_boxes = pred.transform.apply_boxes_torch(
                                                 input_boxes,
                                                 src_image.shape[:2]
                                                 )
-            masks, _, _ = predictor.predict_torch(
+            masks, _, _ = pred.predict_torch(
                 point_coords=None,
                 point_labels=None,
                 boxes=transformed_boxes,
@@ -252,7 +236,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         # Inference from a single point
         elif self.input_point is not None and self.input_box is None:
-            masks, _, _ = predictor.predict(
+            masks, _, _ = pred.predict(
                 point_coords=self.input_point,
                 point_labels=self.input_label,
                 multimask_output=True,
@@ -261,7 +245,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         # Inference from a single box
         elif self.input_point is None and len(self.input_box) == 1:
-            masks, _, _ = predictor.predict(
+            masks, _, _ = pred.predict(
             point_coords=None,
             point_labels=None,
             box=self.input_box[None, :],
@@ -271,7 +255,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         # Inference from a single box and a single point
         elif self.input_point is not None and len(self.input_box) == 1:
-            masks, _, _ = predictor.predict(
+            masks, _, _ = pred.predict(
                 point_coords=self.input_point,
                 point_labels=np.array([0]),
                 box=self.input_box,
@@ -316,9 +300,27 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         graph_input = self.get_input(1)
         if graph_input.is_data_available() or param.image_path != "":
-            mask = self.infer_predictor(graph_input, src_image, ratio, self.sam)
+            print(self.predictor)
+            if self.predictor is None:
+                self.predictor = SamPredictor(self.sam)
+            mask = self.infer_predictor(graph_input, src_image, ratio, self.predictor)
         else:
-            mask = self.infer_mask_generator(src_image, self.sam)
+            if param.update or self.mask_generator is None:
+                self.mask_generator = SamAutomaticMaskGenerator(
+                            model=self.sam,
+                            points_per_side= param.points_per_side, # number of points to be sampled along one side of the image
+                            points_per_batch=param.points_per_batch, # number of points to be sampled in one batch
+                            pred_iou_thresh=param.iou_thres, # predicted mask quality
+                            stability_score_thresh= param.stability_score_thresh, #  cutoff used to binarize the mask predictions
+                            box_nms_thresh=param.box_nms_thresh, # box IoU cutoff (filter duplicate masks)
+                            crop_n_layers = param.crop_n_layers, #  mask prediction will be run again on crops of the image
+                            crop_overlap_ratio=param.crop_overlap_ratio,
+                            crop_nms_thresh=param.crop_nms_thresh,
+                            crop_n_points_downscale_factor= param.crop_n_points_downscale_factor,
+                            min_mask_region_area=param.min_mask_region_area # post-process remove disconected regions
+                                )
+                param.update = False
+            mask = self.infer_mask_generator(src_image, self.mask_generator)
 
         mask = mask.astype("uint8")
         if param.input_size_percent < 100:
@@ -326,7 +328,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                             mask,
                             (w_orig, h_orig),
                             interpolation = cv2.INTER_NEAREST
-                                )
+            )
 
         self.get_output(0)
         self.set_mask(mask)
@@ -350,10 +352,12 @@ class InferSegmentAnythingFactory(dataprocess.CTaskFactory):
         self.info.name = "infer_segment_anything"
         self.info.short_description = "Inference for Segment Anything Model (SAM)."
         self.info.description = "This algorithm proposes inference for the Segment Anything Model (SAM). " \
-                                "It can be used to generate masks for all objects in an image."
+                                "It can be used to generate masks for all objects in an image. " \
+                                "With its promptable segmentation capability, SAM delivers unmatched " \
+                                "versatility for various image analysis tasks. "
         # relative path -> as displayed in Ikomia application process tree
         self.info.path = "Plugins/Python/Segmentation"
-        self.info.version = "1.0.0"
+        self.info.version = "1.0.1"
         self.info.icon_path = "icons/meta_icon.jpg"
         self.info.authors = "Alexander Kirillov, Alex Berg, Chloe Rolland, Eric Mintun, Hanzi Mao, " \
                             "Laura Gustafson, Nikhila Ravi, Piotr Dollar, Ross Girshick, "  \
@@ -367,7 +371,7 @@ class InferSegmentAnythingFactory(dataprocess.CTaskFactory):
         # Code source repository
         self.info.repository = "https://github.com/facebookresearch/segment-anything"
         # Keywords used for search
-        self.info.keywords = "your,keywords,here"
+        self.info.keywords = "SAM, ViT, Zero-Shot, SA-1B dataset, Meta"
 
     def create(self, param=None):
         # Create process object
