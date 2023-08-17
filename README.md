@@ -6,6 +6,39 @@ The Segment Anything Model (SAM) offers multiple inference modes for generating 
 
 The SAM model can be loaded with three different encoders: ViT-B, ViT-L, and ViT-H. The encoders differ in parameter counts, with ViT-B containing 91M, ViT-L containing 308M, and ViT-H containing 636M parameters. Keep in mind that encoder size also affects inference speed, so choose the appropriate encoder based on your specific use case.
 
+
+## :rocket: Inference with Ikomia API
+
+``` python
+from ikomia.dataprocess.workflow import Workflow
+from ikomia.utils.displayIO import display
+
+# Init your workflow
+wf = Workflow()    
+
+# Add SAM algorithm
+sam = wf.add_task(name="infer_segment_anything", auto_connect=True)
+
+sam.set_parameters({ 
+    'model_name': 'vit_b',
+    # 'points_per_side' : '32', # Automatic mask generation used when no graphics prompt is provided
+    'input_size_percent': '100',
+    # 'mask_id': '1', # for inference from single point prompt: 1, 2 or 3
+    'draw_graphic_input': 'True', # Set to true for drawing graphics using the API
+    # 'input_point': '[[xy], [xy]]', # use prompt coordinate instead of drawing graphics
+    # 'input_label' : '[1,0]'
+    # 'input_box': '[[xyxy], [xyxy]]', # use prompt coordinate instead of drawing graphics
+    "draw_graphic_input": "True",
+}) 
+
+# Run on your image  
+wf.run_on(url="https://raw.githubusercontent.com/Ikomia-dev/notebooks/main/examples/img/img_dog.png")
+
+
+# Inspect your results
+display(sam.get_image_with_mask())
+```
+
 ## 1. Automated mask generation
 When no prompt is used, SAM will generate masks automatically over the entire image. 
 You can select the number of masks using the parameter "Points per side" on Ikomia STUDIO or "points_per_side" with the API. Here is an example with ViT-H using the default settings (32 points/side).  
