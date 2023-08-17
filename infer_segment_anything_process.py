@@ -18,7 +18,7 @@
 
 import copy
 from ikomia import core, dataprocess, utils
-
+import json
 import numpy as np
 import torch
 import cv2
@@ -53,8 +53,8 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.input_size_percent = 100
         self.mask_id = 1
         self.draw_graphic_input = False
-        self.input_point = None
-        self.input_box = None
+        self.input_point = ''
+        self.input_box = ''
         self.cuda = torch.cuda.is_available()
         self.update = False
         self.image_path = ""
@@ -76,8 +76,8 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.input_size_percent = int(param_map["input_size_percent"])
         self.mask_id = int(param_map["mask_id"])
         self.draw_graphic_input = utils.strtobool(param_map["draw_graphic_input"])
-        self.input_point = list(param_map['input_point'])
-        self.input_box = list(param_map['input_box'])
+        self.input_point = param_map['input_point']
+        self.input_box = param_map['input_box']
         self.cuda = utils.strtobool(param_map["cuda"])
         self.image_path = param_map["image_path"]
         self.update = True
@@ -173,14 +173,11 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         return mask_output
 
-    def infer_predictor(self, graph_input, src_image, resizing, pred):
+    def infer_predictor(self, graph_input, src_image, resizing, pred, box_list, point):
         # Get parameters :
         param = self.get_param_object()
 
-        graphics = graph_input.get_items() #Get list of input graphics items.
-
         # Get input from graphics (API)
-        print('param.draw_graphic_input', param.draw_graphic_input)
         if param.draw_graphic_input:
             app = QApplication([])
             drawing_app = DrawingGraphics(src_image)
@@ -195,8 +192,23 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             if len(drawing_app.point) > 0:
                 self.input_point = np.array([drawing_app.point])
 
-        # Get input from graphics (STUDIO)
+        # Get input from coordinate prompt in STUDIO
+        elif box_list or point:
+            if box_list:
+                box_list = json.loads(box_list)
+                self.input_box = np.array(box_list)
+                self.input_box = self.input_box * resizing
+                self.input_label = np.array([0]) # background point
+                self.multi_mask_out = False
+            
+            if point:
+                point = json.loads(point)
+                self.input_point = np.array([point])
+                self.input_point = self.input_point * resizing
+
+        # Get input from drawn graphics in STUDIO
         else:
+            graphics = graph_input.get_items() #Get list of input graphics items.
             box = []
             for i, graphic in enumerate(graphics):
                 bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
@@ -209,7 +221,6 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                     self.input_box = np.array(box)
                     self.input_label = np.array([0]) # background point
                     self.multi_mask_out = False
-
                 if graphic.get_type() == core.GraphicsItem.POINT: # point
                     point = [bboxes[0]*resizing, bboxes[1]*resizing]
                     self.input_point = np.array([point])
@@ -307,11 +318,18 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             param.update = False
 
         graph_input = self.get_input(1)
-        if graph_input.is_data_available() or param.draw_graphic_input:
-            print(self.predictor)
+        if graph_input.is_data_available() or param.draw_graphic_input \
+            or param.input_box or param.input_point:
             if self.predictor is None:
                 self.predictor = SamPredictor(self.sam)
-            mask = self.infer_predictor(graph_input, src_image, ratio, self.predictor)
+            mask = self.infer_predictor(
+                                graph_input=graph_input,
+                                src_image=src_image,
+                                resizing=ratio,
+                                pred=self.predictor,
+                                box_list=param.input_box,
+                                point=param.input_point
+            )
         else:
             if param.update or self.mask_generator is None:
                 self.mask_generator = SamAutomaticMaskGenerator(
@@ -326,7 +344,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                             crop_nms_thresh=param.crop_nms_thresh,
                             crop_n_points_downscale_factor= param.crop_n_points_downscale_factor,
                             min_mask_region_area=param.min_mask_region_area # post-process remove disconected regions
-                                )
+                )
                 param.update = False
             mask = self.infer_mask_generator(src_image, self.mask_generator)
 
