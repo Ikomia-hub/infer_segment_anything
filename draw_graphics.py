@@ -31,7 +31,7 @@ class DrawingGraphics(QWidget):
 		self.pixmap = QPixmap.fromImage(qimage)
 		self.resize(self.pixmap.width(), self.pixmap.height())
 		self.show()
-		self.setWindowTitle("Draw box(es) and/or a point and then close the window")
+		self.setWindowTitle("Draw box(es) and/or point(s), close the window to continue the workflow")
 		layout = QVBoxLayout()
 		self.setLayout(layout)
 		self.begin, self.destination = QPoint(), QPoint()
