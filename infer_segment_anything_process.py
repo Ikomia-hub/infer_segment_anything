@@ -52,6 +52,9 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.min_mask_region_area = 0
         self.input_size_percent = 100
         self.mask_id = 1
+        self.draw_graphic_input = False
+        self.input_point = None
+        self.input_box = None
         self.cuda = torch.cuda.is_available()
         self.update = False
         self.image_path = ""
@@ -72,6 +75,9 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.min_mask_region_area = int(param_map["min_mask_region_area"])
         self.input_size_percent = int(param_map["input_size_percent"])
         self.mask_id = int(param_map["mask_id"])
+        self.draw_graphic_input = utils.strtobool(param_map["draw_graphic_input"])
+        self.input_point = list(param_map['input_point'])
+        self.input_box = list(param_map['input_box'])
         self.cuda = utils.strtobool(param_map["cuda"])
         self.image_path = param_map["image_path"]
         self.update = True
@@ -93,6 +99,9 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         param_map["min_mask_region_area"] = str(self.min_mask_region_area)
         param_map["input_size_percent"] = str(self.input_size_percent)
         param_map["mask_id"] = str(self.mask_id)
+        param_map["draw_graphic_input"] = str(self.draw_graphic_input)
+        param_map["input_point"] = str(self.input_point)
+        param_map["input_box"] = str(self.input_box)
         param_map["image_path"] = self.image_path
         param_map["cuda"] = str(self.cuda)
         return param_map
@@ -164,28 +173,27 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         return mask_output
 
-    def infer_predictor(self, graph_input,src_image, resizing, pred):
+    def infer_predictor(self, graph_input, src_image, resizing, pred):
         # Get parameters :
         param = self.get_param_object()
 
         graphics = graph_input.get_items() #Get list of input graphics items.
-        # Get input from graphics (API)
-        if param.image_path != "":
-            if os.path.isfile(param.image_path):
-                app = QApplication([])
-                drawing_app = DrawingGraphics(param.image_path)
-                drawing_app.show()
-                app.exec_()
-                app.quit()
-                if len(drawing_app.boxes) > 0:
-                    self.input_box = np.array(drawing_app.boxes)
-                    self.input_label = np.array([0]) # background point
-                    self.multi_mask_out = False
 
-                if len(drawing_app.point) > 0:
-                    self.input_point = np.array([drawing_app.point])
-            else:
-                print("Invalid image path")
+        # Get input from graphics (API)
+        print('param.draw_graphic_input', param.draw_graphic_input)
+        if param.draw_graphic_input:
+            app = QApplication([])
+            drawing_app = DrawingGraphics(src_image)
+            drawing_app.show()
+            app.exec_()
+            app.quit()
+            if len(drawing_app.boxes) > 0:
+                self.input_box = np.array(drawing_app.boxes)
+                self.input_label = np.array([0]) # background point
+                self.multi_mask_out = False
+
+            if len(drawing_app.point) > 0:
+                self.input_point = np.array([drawing_app.point])
 
         # Get input from graphics (STUDIO)
         else:
@@ -299,7 +307,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
             param.update = False
 
         graph_input = self.get_input(1)
-        if graph_input.is_data_available() or param.image_path != "":
+        if graph_input.is_data_available() or param.draw_graphic_input:
             print(self.predictor)
             if self.predictor is None:
                 self.predictor = SamPredictor(self.sam)
