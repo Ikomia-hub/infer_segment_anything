@@ -28,7 +28,6 @@ sam.set_parameters({
     # 'input_point': '[[xy], [xy]]', # use prompt coordinate instead of drawing graphics
     # 'input_label' : '[1,0]'
     # 'input_box': '[[xyxy], [xyxy]]', # use prompt coordinate instead of drawing graphics
-    "draw_graphic_input": "True",
 }) 
 
 # Run on your image  
