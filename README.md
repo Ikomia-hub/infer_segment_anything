@@ -26,7 +26,7 @@ sam.set_parameters({
     # 'mask_id': '1', # for inference from single point prompt: 1, 2 or 3
     'draw_graphic_input': 'True', # Set to true for drawing graphics using the API
     # 'input_point': '[[xy], [xy]]', # use prompt coordinate instead of drawing graphics
-    # 'input_label' : '[1,0]'
+    # 'input_point_label' : '[1,0]',
     # 'input_box': '[[xyxy], [xyxy]]', # use prompt coordinate instead of drawing graphics
 }) 
 
