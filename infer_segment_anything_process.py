@@ -58,7 +58,6 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.input_point_label = ''
         self.cuda = torch.cuda.is_available()
         self.update = False
-        self.image_path = ""
 
     def set_values(self, param_map):
         # Set parameters values from Ikomia application
@@ -81,7 +80,6 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.input_point_label = param_map['input_point_label']
         self.input_box = param_map['input_box']
         self.cuda = utils.strtobool(param_map["cuda"])
-        self.image_path = param_map["image_path"]
         self.update = True
 
     def get_values(self):
@@ -105,7 +103,6 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         param_map["input_point"] = str(self.input_point)
         param_map["input_point_label"] = str(self.input_point_label)
         param_map["input_box"] = str(self.input_box)
-        param_map["image_path"] = self.image_path
         param_map["cuda"] = str(self.cuda)
         return param_map
 
@@ -235,7 +232,12 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         pred.set_image(src_image)
 
         # Inference from multiple boxes
-        if self.input_box is not None and len(self.input_box) > 1:
+        if self.input_box is None and self.input_point is None:
+            print('Use graphic inputs or set the parameters draw_graphic_input to False')
+            mask_output = np.zeros(src_image.shape[:2])
+
+        
+        elif self.input_box is not None and len(self.input_box) > 1:
             self.multi_mask_out = False
             input_boxes = torch.tensor(self.input_box, device=self.device)
             transformed_boxes = pred.transform.apply_boxes_torch(
