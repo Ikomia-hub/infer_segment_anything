@@ -77,6 +77,11 @@ class InferSegmentAnythingWidget(core.CWorkflowTaskWidget):
                                             "Point coord. xy (optional)",
                                             self.parameters.input_point
                                             )
+        
+        self.edit_point_label = pyqtutils.append_edit(self.grid_layout,
+                                    "Point label (optional)",
+                                    self.parameters.input_point_label
+                                    )
         # Set widget layout
         self.set_layout(layout_ptr)
 
@@ -90,7 +95,7 @@ class InferSegmentAnythingWidget(core.CWorkflowTaskWidget):
         self.parameters.mask_id = self.spin_mask_output.value()
         self.parameters.input_box = self.edit_box_input.text()
         self.parameters.input_point = self.edit_point_input.text()
-
+        self.parameters.input_point_label = self.edit_point_label.text()
         # Send signal to launch the process
         self.emit_apply(self.parameters)
 

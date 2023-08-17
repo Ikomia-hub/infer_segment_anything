@@ -55,6 +55,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.draw_graphic_input = False
         self.input_point = ''
         self.input_box = ''
+        self.input_point_label = ''
         self.cuda = torch.cuda.is_available()
         self.update = False
         self.image_path = ""
@@ -77,6 +78,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         self.mask_id = int(param_map["mask_id"])
         self.draw_graphic_input = utils.strtobool(param_map["draw_graphic_input"])
         self.input_point = param_map['input_point']
+        self.input_point_label = param_map['input_point_label']
         self.input_box = param_map['input_box']
         self.cuda = utils.strtobool(param_map["cuda"])
         self.image_path = param_map["image_path"]
@@ -101,6 +103,7 @@ class InferSegmentAnythingParam(core.CWorkflowTaskParam):
         param_map["mask_id"] = str(self.mask_id)
         param_map["draw_graphic_input"] = str(self.draw_graphic_input)
         param_map["input_point"] = str(self.input_point)
+        param_map["input_point_label"] = str(self.input_point_label)
         param_map["input_box"] = str(self.input_box)
         param_map["image_path"] = self.image_path
         param_map["cuda"] = str(self.cuda)
@@ -200,7 +203,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 self.input_box = self.input_box * resizing
                 self.input_label = np.array([0]) # background point
                 self.multi_mask_out = False
-            
+ 
             if point:
                 point = json.loads(point)
                 self.input_point = np.array([point])
@@ -210,6 +213,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         else:
             graphics = graph_input.get_items() #Get list of input graphics items.
             box = []
+            point = []
             for i, graphic in enumerate(graphics):
                 bboxes = graphics[i].get_bounding_rect() # Get graphic coordinates
                 if graphic.get_type() == core.GraphicsItem.RECTANGLE: # rectangle
@@ -222,8 +226,10 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                     self.input_label = np.array([0]) # background point
                     self.multi_mask_out = False
                 if graphic.get_type() == core.GraphicsItem.POINT: # point
-                    point = [bboxes[0]*resizing, bboxes[1]*resizing]
-                    self.input_point = np.array([point])
+                    x1 = bboxes[0]*resizing
+                    y1 = bboxes[1]*resizing
+                    point.append([x1, y1])
+                    self.input_point = np.array(point)
 
         # Calculate the necessary image embedding
         pred.set_image(src_image)
@@ -253,14 +259,31 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 i += 1
                 mask_output = mask_output + mask * i
 
-        # Inference from a single point
+        # Inference from points
         elif self.input_point is not None and self.input_box is None:
-            masks, _, _ = pred.predict(
-                point_coords=self.input_point,
-                point_labels=self.input_label,
-                multimask_output=True,
-            )
-            mask_output = masks[param.mask_id-1]
+            if len(self.input_point) == 1:
+                masks, _, _ = pred.predict(
+                    point_coords=self.input_point,
+                    point_labels=self.input_label,
+                    multimask_output=True,
+                )
+                mask_output = masks[param.mask_id-1]
+            
+            if len(self.input_point) > 1:
+                if param.input_point_label: 
+                    self.input_label = json.loads(param.input_point_label)
+                    self.input_label = np.array(self.input_label)
+                    if len(self.input_label) != self.input_label: # Edit input label if the user makes a mistake
+                        self.input_label = np.ones(len(self.input_point))
+                else:
+                    self.input_label = np.ones(len(self.input_point)) # Automatically generate input labels
+
+                masks, _, _ = pred.predict(
+                    point_coords=self.input_point,
+                    point_labels=self.input_label,
+                    multimask_output=True,
+                )
+                mask_output = masks[param.mask_id-1]
 
         # Inference from a single box
         elif self.input_point is None and len(self.input_box) == 1:
