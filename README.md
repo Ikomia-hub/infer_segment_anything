@@ -1,90 +1,117 @@
-# infer_segment_anything
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/icons/meta_icon.jpg" alt="Algorithm icon">
+  <h1 align="center">infer_segment_anything</h1>
+</div>
+<br />
+<p align="center">
+    <a href="https://github.com/Ikomia-hub/infer_segment_anything">
+        <img alt="Stars" src="https://img.shields.io/github/stars/Ikomia-hub/infer_segment_anything">
+    </a>
+    <a href="https://app.ikomia.ai/hub/">
+        <img alt="Website" src="https://img.shields.io/website/http/app.ikomia.ai/en.svg?down_color=red&down_message=offline&up_message=online">
+    </a>
+    <a href="https://github.com/Ikomia-hub/infer_segment_anything/blob/main/LICENSE.md">
+        <img alt="GitHub" src="https://img.shields.io/github/license/Ikomia-hub/infer_segment_anything.svg?color=blue">
+    </a>    
+    <br>
+    <a href="https://discord.com/invite/82Tnw9UGGc">
+        <img alt="Discord community" src="https://img.shields.io/badge/Discord-white?style=social&logo=discord">
+    </a> 
+</p>
 
-The Segment Anything Model (SAM) offers multiple inference modes for generating masks:
-1. Automated mask generation (segmentation over the full image)
-2. Segmentation masks from prompts (bounding boxes or points)
+This algorithm proposes inference for the Segment Anything Model (SAM). It can be used to generate masks for all objects in an image. With its promptable segmentation capability, SAM delivers unmatched versatility for various image analysis tasks. 
 
-The SAM model can be loaded with three different encoders: ViT-B, ViT-L, and ViT-H. The encoders differ in parameter counts, with ViT-B containing 91M, ViT-L containing 308M, and ViT-H containing 636M parameters. Keep in mind that encoder size also affects inference speed, so choose the appropriate encoder based on your specific use case.
+[Insert illustrative image here. Image must be accessible publicly, in algorithm Github repository for example.
+<img src="images/illustration.png"  alt="Illustrative image" width="30%" height="30%">]
 
+## :rocket: Use with Ikomia API
 
-## :rocket: Inference with Ikomia API
+#### 1. Install Ikomia API
 
-``` python
-from ikomia.dataprocess.workflow import Workflow
-from ikomia.utils.displayIO import display
+We strongly recommend using a virtual environment. If you're not sure where to start, we offer a tutorial [here](https://www.ikomia.ai/blog/a-step-by-step-guide-to-creating-virtual-environments-in-python).
 
-# Init your workflow
-wf = Workflow()    
-
-# Add SAM algorithm
-sam = wf.add_task(name="infer_segment_anything", auto_connect=True)
-
-sam.set_parameters({ 
-    'model_name': 'vit_b',
-    # 'points_per_side' : '32', # Automatic mask generation used when no graphics prompt is provided
-    'input_size_percent': '100',
-    # 'mask_id': '1', # for inference from single point prompt: 1, 2 or 3
-    'draw_graphic_input': 'True', # Set to true for drawing graphics using the API
-    # 'input_point': '[[xy], [xy]]', # use prompt coordinate instead of drawing graphics
-    # 'input_point_label' : '[1,0]',
-    # 'input_box': '[[xyxy], [xyxy]]', # use prompt coordinate instead of drawing graphics
-}) 
-
-# Run on your image  
-wf.run_on(url="https://raw.githubusercontent.com/Ikomia-dev/notebooks/main/examples/img/img_dog.png")
-
-
-# Inspect your results
-display(sam.get_image_with_mask())
+```sh
+pip install ikomia
 ```
 
-## 1. Automated mask generation
-When no prompt is used, SAM will generate masks automatically over the entire image. 
-You can select the number of masks using the parameter "Points per side" on Ikomia STUDIO or "points_per_side" with the API. Here is an example with ViT-H using the default settings (32 points/side).  
+#### 2. Create your workflow
 
-<img src="images/dog_auto_seg.png"  width="30%" height="30%">
+[Change the sample image URL to fit algorithm purpose]
 
+```python
+import ikomia
+from ikomia.dataprocess.workflow import Workflow
 
-## 2. Segmentation mask with graphic prompts:
-Given a graphic prompts: a single point or boxes SAM can predict masks over the desired objects. 
-- Ikomia API: 
-    - Using graphics: Set the parameter draw_graphic_input=True to draw over the image.
-        - Point: A point can be generated with a left click
-        - Box: Left click > drag > release
-    - Using prompt coordinate
-        - Point: 'input_point' parameter, e.g. [xy] or [[xy], [xy]]
-        - Point label: 'input_point_label' parameters, e.g. [1,0] 1 to include, 0 to exclude from mask
-        - Box: 'input_box' parameter, e,g, [xyxy] or [[xyxy], [xyxy]].
+# Init your workflow
+wf = Workflow()
 
+# Add algorithm
+algo = wf.add_task(name="infer_segment_anything", auto_connect=True)
 
+# Run on your image  
+wf.run_on(url="example_image.png")
+```
 
-- Ikomia STUDIO:
-    - Using graphics
-        - Point: Select the point tool
-        - Box: Select the Square/Rectangle tool
-    - Using coordinate prompts
-        - Point: 'Point coord. xy (optional)' [[xy], [xy]]
-        - Point label: [1,0], 1 to include, 0 to exclude from mask
-        - Box: 'Box coord. xyxy (optional)' [[xyxy], [xyxy]]
+## :sunny: Use with Ikomia Studio
 
-### a. Single point 
-SAM with generate three outputs given a single point (3 best scores). 
-You can select which mask to output using the mask_id parameters (1, 2 or 3) 
-<img src="images/dog_single_point.png"  width="80%" height="80%">
+Ikomia Studio offers a friendly UI with the same features as the API.
 
+- If you haven't started using Ikomia Studio yet, download and install it from [this page](https://www.ikomia.ai/studio).
 
-### b. Multiple points
-A single point can be ambiguous, using multiple points can improve the quality of the expected mask.
+- For additional guidance on getting started with Ikomia Studio, check out [this blog post](https://www.ikomia.ai/blog/how-to-get-started-with-ikomia-studio).
 
-### c. Boxes
-Drawing a box over the desired object usually output a mask closer to expectation compared to point(s). 
+## :pencil: Set algorithm parameters
 
-SAM can also take multiple inputs prompts.
+[Explain each algorithm parameters]
 
-<img src="images/cats_boxes.png"  width="80%" height="80%">
+[Change the sample image URL to fit algorithm purpose]
 
-### d. Point and box
+```python
+import ikomia
+from ikomia.dataprocess.workflow import Workflow
 
-Point and box can be combined by including both types of prompts to the predictor. Here this can be used to select just the trucks's tire, instead of the entire wheel.
+# Init your workflow
+wf = Workflow()
 
-<img src="images/truck_box_point.png"  width="80%" height="80%">
+# Add algorithm
+algo = wf.add_task(name="infer_segment_anything", auto_connect=True)
+
+algo.set_parameters({
+    "param1": "value1",
+    "param2": "value2",
+    ...
+})
+
+# Run on your image  
+wf.run_on(url="example_image.png")
+
+```
+
+## :mag: Explore algorithm outputs
+
+Every algorithm produces specific outputs, yet they can be explored them the same way using the Ikomia API. For a more in-depth understanding of managing algorithm outputs, please refer to the [documentation](https://ikomia-dev.github.io/python-api-documentation/advanced_guide/IO_management.html).
+
+```python
+import ikomia
+from ikomia.dataprocess.workflow import Workflow
+
+# Init your workflow
+wf = Workflow()
+
+# Add algorithm
+algo = wf.add_task(name="infer_segment_anything", auto_connect=True)
+
+# Run on your image  
+wf.run_on(url="example_image.png")
+
+# Iterate over outputs
+for output in algo.get_outputs()
+    # Print information
+    print(output)
+    # Export it to JSON
+    output.to_json()
+```
+
+## :fast_forward: Advanced usage 
+
+[optional]
