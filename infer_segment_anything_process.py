@@ -336,7 +336,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
 
         # Load model
         if param.update or self.sam is None:
-            self.device = torch.device("cuda") if param.cuda else torch.device("cpu")
+            self.device = torch.device("cuda") if param.cuda and torch.cuda.is_available() else torch.device("cpu")
             model_path = self.get_model(param.model_name)
             self.sam = sam_model_registry[param.model_name](checkpoint=model_path)
             self.sam.to(device=self.device)
