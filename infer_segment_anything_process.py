@@ -402,10 +402,6 @@ class InferSegmentAnythingFactory(dataprocess.CTaskFactory):
         # Set process information as string here
         self.info.name = "infer_segment_anything"
         self.info.short_description = "Inference for Segment Anything Model (SAM)."
-        self.info.description = "This algorithm proposes inference for the Segment Anything Model (SAM). " \
-                                "It can be used to generate masks for all objects in an image. " \
-                                "With its promptable segmentation capability, SAM delivers unmatched " \
-                                "versatility for various image analysis tasks. "
         # relative path -> as displayed in Ikomia application process tree
         self.info.path = "Plugins/Python/Segmentation"
         self.info.version = "1.1.1"
@@ -420,7 +416,8 @@ class InferSegmentAnythingFactory(dataprocess.CTaskFactory):
         # URL of documentation
         self.info.documentation_link = "https://segment-anything.com/"
         # Code source repository
-        self.info.repository = "https://github.com/facebookresearch/segment-anything"
+        self.info.repository = "https://github.com/Ikomia-hub/infer_segment_anything"
+        self.info.original_repository = "https://github.com/facebookresearch/segment-anything"
         # Keywords used for search
         self.info.keywords = "SAM, ViT, Zero-Shot, SA-1B dataset, Meta"
 
