@@ -420,6 +420,8 @@ class InferSegmentAnythingFactory(dataprocess.CTaskFactory):
         self.info.original_repository = "https://github.com/facebookresearch/segment-anything"
         # Keywords used for search
         self.info.keywords = "SAM, ViT, Zero-Shot, SA-1B dataset, Meta"
+        self.info.algo_type = core.AlgoType.INFER
+        self.info.algo_tasks = "SEMANTIC_SEGMENTATION"
 
     def create(self, param=None):
         # Create process object
