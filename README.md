@@ -21,7 +21,7 @@
 
 This algorithm proposes inference for the Segment Anything Model (SAM). It can be used to generate masks for all objects in an image. With its promptable segmentation capability, SAM delivers unmatched versatility for various image analysis tasks. 
 
-![Sam cat](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/icons/output.jpg)
+![Sam cat](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/output.jpg)
 
 ## :rocket: Use with Ikomia API
 
@@ -144,7 +144,7 @@ for output in algo.get_outputs():
 When no prompt is used, SAM will generate masks automatically over the entire image. 
 You can select the number of masks using the parameter "Points per side" on Ikomia STUDIO or "points_per_side" with the API. Here is an example with ViT-H using the default settings (32 points/side).  
 
-![Sam dog auto](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/images/dog_auto_seg.png)
+![Sam dog auto](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/images/dog_auto_seg.png)
 
 
 ## 2. Segmentation mask with graphic prompts:
@@ -172,7 +172,7 @@ Given a graphic prompts: a single point or boxes SAM can predict masks over the 
 SAM with generate three outputs given a single point (3 best scores). 
 You can select which mask to output using the mask_id parameters (1, 2 or 3) 
 
-![Sam dog single](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/images/dog_single_point.png)
+![Sam dog single](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/images/dog_single_point.png)
 
 
 ### b. Multiple points
@@ -182,10 +182,10 @@ A single point can be ambiguous, using multiple points can improve the quality o
 Drawing a box over the desired object usually output a mask closer to expectation compared to point(s). 
 
 SAM can also take multiple inputs prompts.
-![Sam cat boxes](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/images/images/cats_boxes.png)
+![Sam cat boxes](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/images/cats_boxes.png)
 
 ### d. Point and box
 
 Point and box can be combined by including both types of prompts to the predictor. Here this can be used to select just the trucks's tire, instead of the entire wheel.
-![truck_box_point](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/images/images/truck_box_point.png)
+![truck_box_point](https://raw.githubusercontent.com/Ikomia-hub/infer_segment_anything/main/images/truck_box_point.png)
 
