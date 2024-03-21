@@ -203,7 +203,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
  
             if point:
                 point = json.loads(point)
-                self.input_point = np.array([point])
+                self.input_point = np.array(point)
                 self.input_point = self.input_point * resizing
 
         # Get input from drawn graphics in STUDIO
