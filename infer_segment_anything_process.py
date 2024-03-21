@@ -126,7 +126,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
         self.predictor = None
         self.mask_generator = None
         self.input_point = None
-        self.input_label = np.array([1]) # forground point
+        self.input_label = np.array([1]) # foreground point
         self.input_box = None
         self.multi_mask_out = True
         self.device = torch.device("cpu")
