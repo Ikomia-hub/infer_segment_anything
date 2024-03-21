@@ -275,7 +275,7 @@ class InferSegmentAnything(dataprocess.CSemanticSegmentationTask):
                 if param.input_point_label: 
                     self.input_label = json.loads(param.input_point_label)
                     self.input_label = np.array(self.input_label)
-                    if len(self.input_label) != self.input_label: # Edit input label if the user makes a mistake
+                    if len(self.input_label) != len(self.input_point): # Edit input label if the user makes a mistake
                         self.input_label = np.ones(len(self.input_point))
                 else:
                     self.input_label = np.ones(len(self.input_point)) # Automatically generate input labels
